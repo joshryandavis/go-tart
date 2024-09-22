@@ -4,12 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
-
-	"github.com/sevlyar/go-daemon"
 )
 
 // DirMount represents a directory mount with its options
@@ -23,7 +19,6 @@ type DirMount struct {
 
 // RunOptions represents the options for running a VM.
 type RunOptions struct {
-	Daemon            bool       `json:"daemon"`
 	NoGraphics        bool       `json:"noGraphics"`
 	Serial            bool       `json:"serial"`
 	SerialPath        string     `json:"serialPath"`
@@ -134,11 +129,6 @@ func (t *Tart) Run(name string, options RunOptions) error {
 	}
 	args = append(args, name)
 
-	if options.Daemon {
-		t.runDaemon(args)
-		return nil
-	}
-
 	cmd := exec.Command("tart", args...)
 	t.setTartHome(cmd)
 
@@ -171,42 +161,4 @@ func (t *Tart) Run(name string, options RunOptions) error {
 	}
 
 	return nil
-}
-
-// runDaemon runs a command as a daemon
-func (t *Tart) runDaemon(args []string) (int, error) {
-	tempDir, err := os.MkdirTemp("", "tart-run-")
-	if err != nil {
-		panic(err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	cntxt := &daemon.Context{
-		PidFileName: filepath.Join(tempDir, "pid"),
-		PidFilePerm: 0644,
-		LogFileName: filepath.Join(tempDir, "log"),
-		LogFilePerm: 0640,
-		WorkDir:     tempDir,
-		Umask:       027,
-		Args:        args,
-	}
-
-	d, err := cntxt.Reborn()
-	if err != nil {
-		panic(err)
-	}
-	defer cntxt.Release()
-
-	if d != nil {
-		return d.Pid, nil
-	}
-
-	cmd := exec.Command("tart", args...)
-	t.setTartHome(cmd)
-
-	if err := cmd.Run(); err != nil {
-		return 0, fmt.Errorf("failed to run command: %w", err)
-	}
-
-	return os.Getpid(), nil
 }
